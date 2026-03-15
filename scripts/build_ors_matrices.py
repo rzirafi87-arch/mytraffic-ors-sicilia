@@ -28,15 +28,37 @@ class ORSClient:
         api_key: str,
         timeout_s: int = 60,
         max_retries: int = 5,
-        backoff_s: float = 2.0,
+        backoff_s: float = 5.0,
         rate_limit_wait_s: float = 60.0,
+        max_backoff_s: float = 300.0,
     ):
         self.api_key = api_key
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.backoff_s = backoff_s
         self.rate_limit_wait_s = rate_limit_wait_s
+        self.max_backoff_s = max_backoff_s
         self.session = requests.Session()
+
+    def _compute_retry_sleep(self, attempt: int, is_rate_limit: bool, response: requests.Response | None) -> float:
+        """Calcola l'attesa di retry con backoff esponenziale conservativo."""
+        # Backoff esponenziale (5, 10, 20, 40, ...) con tetto massimo.
+        exp_backoff = min(self.max_backoff_s, self.backoff_s * (2 ** (attempt - 1)))
+
+        if not is_rate_limit:
+            return exp_backoff
+
+        retry_after_s: float | None = None
+        if response is not None:
+            retry_after_header = response.headers.get("Retry-After")
+            if retry_after_header is not None:
+                try:
+                    retry_after_s = float(retry_after_header)
+                except ValueError:
+                    retry_after_s = None
+
+        # Per i 429 attendiamo almeno 60s, rispettando se possibile Retry-After.
+        return max(exp_backoff, self.rate_limit_wait_s, retry_after_s or 0.0)
 
     def matrix_one_to_many(
         self,
@@ -85,15 +107,18 @@ class ORSClient:
                 response = getattr(exc, "response", None)
                 is_rate_limit = response is not None and response.status_code == 429
 
-                sleep_s = self.backoff_s ** attempt
+                sleep_s = self._compute_retry_sleep(
+                    attempt=attempt,
+                    is_rate_limit=is_rate_limit,
+                    response=response,
+                )
                 if is_rate_limit:
                     print(
                         f"[retry {attempt}/{self.max_retries}] ORS 429 Rate Limit Exceeded. "
-                        f"Attendo {self.rate_limit_wait_s:.1f}s prima del backoff."
+                        f"Attendo {sleep_s:.1f}s prima del prossimo tentativo."
                     )
-                    time.sleep(self.rate_limit_wait_s)
-
-                print(f"[retry {attempt}/{self.max_retries}] errore ORS: {exc}. Attendo {sleep_s:.1f}s")
+                else:
+                    print(f"[retry {attempt}/{self.max_retries}] errore ORS: {exc}. Attendo {sleep_s:.1f}s")
                 time.sleep(sleep_s)
 
         raise RuntimeError("Retry loop terminato in modo inatteso")
