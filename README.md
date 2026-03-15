@@ -1,46 +1,62 @@
 # MYTRAFFIC_ORS
 
-Obiettivo:
-Calcolare matrici di drive-time reali in Sicilia con OpenRouteService.
+Script per calcolare matrici di drive-time reali in Sicilia con OpenRouteService.
 
 ## Input
-- input/negozi_rete.csv
-- input/competitor_sicilia.csv
-- input/comuni_sicilia.csv
+- `input/negozi_rete.csv`
+- `input/competitor_sicilia.csv`
+- `input/comuni_sicilia.csv`
 
-## Output attesi
-- output/ors_store_competitor.csv
-- output/ors_comune_store.csv
+Lo script usa i **nomi colonna reali** presenti nei file:
 
-## Vincoli
-- max 2000 richieste per batch
-- salvataggio progressivo
-- uso coordinate lat/lon
-- gestione errori, timeout e retry
-- ripresa da file output già esistenti
+- `negozi_rete.csv`: `store_id`, `brand`, `comune`, `provincia`, `lat`, `lon`
+- `competitor_sicilia.csv`: `competitor_id`, `brand`, `comune`, `indirizzo`, `lat`, `lon`, `peso_competitor`, `livello_competitor`
+- `comuni_sicilia.csv`: `comune`, `provincia`, `popolazione`, `lat`, `lon`
 
-## Note sui campi
-negozi_rete.csv
-- store_id
-- brand
-- comune
-- provincia
-- lat
-- lon
+## Output
+- `output/ors_store_competitor.csv`
+  - `store_id`, `competitor_id`, `tempo_minuti`, `distanza_km`
+- `output/ors_comune_store.csv`
+  - `comune`, `store_id`, `tempo_minuti`, `distanza_km`
 
-competitor_sicilia.csv
-- competitor_id
-- brand
-- comune
-- indirizzo
-- lat
-- lon
-- peso_competitor
-- livello_competitor
+## Requisiti
+```bash
+pip install -r requirements.txt
+```
 
-comuni_sicilia.csv
-- comune
-- provincia
-- popolazione
-- lat
-- lon
+## Esecuzione
+Imposta la chiave ORS:
+
+```bash
+export ORS_API_KEY="la_tua_chiave"
+```
+
+Esegui:
+
+```bash
+python scripts/build_ors_matrices.py
+```
+
+## Opzioni utili
+- `--max-pairs-per-batch` (default `2000`): massimo numero di coppie origine-destinazione per singola chiamata ORS.
+- `--save-every` (default `500`): salva progressivamente ogni N righe calcolate.
+- `--limit-pairs` (default nessun limite): limita il numero di nuove coppie da calcolare (utile per test iniziali).
+- `--timeout` e `--retries`: gestione timeout e retry automatici.
+
+Esempio test iniziale (nessuna chiamata ORS, solo validazione input):
+
+```bash
+python scripts/build_ors_matrices.py --limit-pairs 0
+```
+
+Esempio test con piccolo batch reale:
+
+```bash
+python scripts/build_ors_matrices.py --limit-pairs 100 --max-pairs-per-batch 2000
+```
+
+## Comportamento implementato
+- Batch massimo per chiamata rispettato (default 2000).
+- Retry automatico su timeout/errori di rete/429/5xx.
+- Salvataggio progressivo su CSV.
+- Ripresa da output esistenti senza ricalcolare coppie già presenti.
