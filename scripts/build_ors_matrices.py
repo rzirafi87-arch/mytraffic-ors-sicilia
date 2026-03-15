@@ -23,11 +23,19 @@ ORS_MATRIX_URL = "https://api.openrouteservice.org/v2/matrix/driving-car"
 
 
 class ORSClient:
-    def __init__(self, api_key: str, timeout_s: int = 60, max_retries: int = 5, backoff_s: float = 2.0):
+    def __init__(
+        self,
+        api_key: str,
+        timeout_s: int = 60,
+        max_retries: int = 5,
+        backoff_s: float = 2.0,
+        rate_limit_wait_s: float = 60.0,
+    ):
         self.api_key = api_key
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.backoff_s = backoff_s
+        self.rate_limit_wait_s = rate_limit_wait_s
         self.session = requests.Session()
 
     def matrix_one_to_many(
@@ -73,7 +81,18 @@ class ORSClient:
             except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as exc:
                 if attempt == self.max_retries:
                     raise RuntimeError(f"ORS matrix fallita dopo {attempt} tentativi: {exc}") from exc
+
+                response = getattr(exc, "response", None)
+                is_rate_limit = response is not None and response.status_code == 429
+
                 sleep_s = self.backoff_s ** attempt
+                if is_rate_limit:
+                    print(
+                        f"[retry {attempt}/{self.max_retries}] ORS 429 Rate Limit Exceeded. "
+                        f"Attendo {self.rate_limit_wait_s:.1f}s prima del backoff."
+                    )
+                    time.sleep(self.rate_limit_wait_s)
+
                 print(f"[retry {attempt}/{self.max_retries}] errore ORS: {exc}. Attendo {sleep_s:.1f}s")
                 time.sleep(sleep_s)
 
@@ -114,6 +133,7 @@ def compute_matrix(
     max_pairs_per_batch: int,
     save_every: int,
     limit_pairs: int | None,
+    sleep_seconds: float,
 ) -> None:
     existing = load_existing_pairs(output_path, source_id_col, dest_id_col)
     pending_rows: list[dict] = []
@@ -157,6 +177,9 @@ def compute_matrix(
                 destinations=[(float(x["lat"]), float(x["lon"])) for x in chunk],
             )
 
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds)
+
             for idx, dst in enumerate(chunk):
                 dst_id = str(dst[dest_id_col])
                 dur = durations[idx] if idx < len(durations) else None
@@ -199,6 +222,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timeout", type=int, default=60)
     parser.add_argument("--retries", type=int, default=5)
+    parser.add_argument(
+        "--sleep-seconds",
+        type=float,
+        default=0.0,
+        help="Pausa (in secondi) tra richieste ORS consecutive.",
+    )
     return parser.parse_args()
 
 
@@ -237,6 +266,7 @@ def main() -> None:
         max_pairs_per_batch=args.max_pairs_per_batch,
         save_every=args.save_every,
         limit_pairs=args.limit_pairs,
+        sleep_seconds=args.sleep_seconds,
     )
 
     compute_matrix(
@@ -250,6 +280,7 @@ def main() -> None:
         max_pairs_per_batch=args.max_pairs_per_batch,
         save_every=args.save_every,
         limit_pairs=args.limit_pairs,
+        sleep_seconds=args.sleep_seconds,
     )
 
     print("Completato.")
