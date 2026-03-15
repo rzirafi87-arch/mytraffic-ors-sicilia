@@ -163,6 +163,7 @@ def compute_matrix(
     existing = load_existing_pairs(output_path, source_id_col, dest_id_col)
     pending_rows: list[dict] = []
     created_pairs = 0
+    requests_made = 0
 
     dest_records = destinations[[dest_id_col, "lat", "lon"]].to_dict("records")
 
@@ -196,14 +197,15 @@ def compute_matrix(
             chunk = missing_dest[i : i + remaining_allowed]
             i += len(chunk)
 
+            if sleep_seconds > 0 and requests_made > 0:
+                time.sleep(sleep_seconds)
+
             durations, distances = client.matrix_one_to_many(
                 source_lat=src_lat,
                 source_lon=src_lon,
                 destinations=[(float(x["lat"]), float(x["lon"])) for x in chunk],
             )
-
-            if sleep_seconds > 0:
-                time.sleep(sleep_seconds)
+            requests_made += 1
 
             for idx, dst in enumerate(chunk):
                 dst_id = str(dst[dest_id_col])
