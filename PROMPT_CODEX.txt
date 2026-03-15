@@ -1,0 +1,43 @@
+Lavora in questo progetto senza toccare file non necessari.
+
+Obiettivo:
+costruire uno script Python che legga:
+- input/negozi_rete.csv
+- input/competitor_sicilia.csv
+- input/comuni_sicilia.csv
+
+e produca:
+- output/ors_store_competitor.csv
+- output/ors_comune_store.csv
+
+Requisiti:
+1. Usa OpenRouteService API.
+2. Calcola:
+   A) store -> competitor
+   B) comune -> store
+3. Usa coordinate lat/lon.
+4. Limita il batch a 2000 richieste per run.
+5. Salva i risultati progressivamente ogni N righe.
+6. Se un output esiste già, riprendi da dove era stato interrotto.
+7. Gestisci errori API, timeout e retry.
+8. Crea anche:
+   - scripts/build_ors_matrices.py
+   - requirements.txt se serve aggiornare dipendenze
+   - README con istruzioni di esecuzione
+9. Non modificare i file input originali.
+10. Mantieni il codice semplice, leggibile e pronto per CSV grandi.
+11. I CSV output devono avere esattamente queste colonne:
+
+ors_store_competitor.csv
+- store_id
+- competitor_id
+- tempo_minuti
+- distanza_km
+
+ors_comune_store.csv
+- comune
+- store_id
+- tempo_minuti
+- distanza_km
+
+12. Aggiungi un parametro semplice per eseguire un sottoinsieme del batch, utile per test iniziali.
