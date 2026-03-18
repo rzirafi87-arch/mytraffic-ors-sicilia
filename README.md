@@ -44,16 +44,46 @@ Mapping atteso dal file Excel master:
 pip install -r requirements.txt
 ```
 
+## Configurazione ORS_API_KEY
+1. Crea il file `.env` partendo dall'esempio:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Apri `.env` e imposta la tua chiave OpenRouteService:
+
+   ```bash
+   ORS_API_KEY=your_openrouteservice_api_key_here
+   ```
+
+3. In alternativa al file `.env`, puoi esportare la variabile direttamente nella shell:
+
+   ```bash
+   export ORS_API_KEY="your_openrouteservice_api_key_here"
+   ```
+
+Lo script legge sempre `ORS_API_KEY` dall'ambiente. Se la variabile non è disponibile, termina con un messaggio chiaro che spiega come configurarla.
+
 ## Esecuzione
-Imposta la chiave ORS:
+Dopo aver configurato `ORS_API_KEY`, esegui la pipeline completa end-to-end:
 
 ```bash
-export ORS_API_KEY="la_tua_chiave"
+python scripts/build_ors_matrices.py --excel MyTraffic_MASTER.xlsx
 ```
 
-Esegui la pipeline completa end-to-end:
+Esempio completo usando `.env`:
 
 ```bash
+cp .env.example .env
+# modifica .env e sostituisci your_openrouteservice_api_key_here con la tua chiave reale
+python scripts/build_ors_matrices.py --excel MyTraffic_MASTER.xlsx
+```
+
+Esempio completo usando una variabile esportata nella shell:
+
+```bash
+export ORS_API_KEY="your_openrouteservice_api_key_here"
 python scripts/build_ors_matrices.py --excel MyTraffic_MASTER.xlsx
 ```
 
