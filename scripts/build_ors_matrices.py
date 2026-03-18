@@ -330,16 +330,42 @@ class XLSXWorkbookEditor:
     def _rows(self, sheet_root: ET.Element) -> list[ET.Element]:
         return self._sheet_data(sheet_root).findall("{*}row")
 
-    def _build_header_map(self, sheet_root: ET.Element) -> dict[str, int]:
+    def _find_header_row(
+        self,
+        sheet_root: ET.Element,
+        header_aliases: Iterable[str],
+    ) -> tuple[ET.Element, dict[str, int]]:
         rows = self._rows(sheet_root)
         if not rows:
             raise ValueError("Il foglio Excel è vuoto e non contiene header.")
-        header_row = rows[0]
-        header_map: dict[str, int] = {}
-        for cell in header_row.findall("{*}c"):
-            col_idx = _xlsx_column_index(cell.attrib.get("r", "A1"))
-            header_map[normalize_column_name(_xlsx_cell_text(cell, self._shared_strings))] = col_idx
-        return header_map
+
+        expected_headers = {normalize_column_name(alias) for alias in header_aliases}
+        best_row: ET.Element | None = None
+        best_header_map: dict[str, int] = {}
+        best_score = -1
+
+        for row in rows:
+            current_map: dict[str, int] = {}
+            for cell in row.findall("{*}c"):
+                cell_value = normalize_column_name(_xlsx_cell_text(cell, self._shared_strings))
+                if not cell_value:
+                    continue
+                col_idx = _xlsx_column_index(cell.attrib.get("r", "A1"))
+                current_map[cell_value] = col_idx
+
+            if not current_map:
+                continue
+
+            score = len(set(current_map) & expected_headers)
+            if score > best_score:
+                best_row = row
+                best_header_map = current_map
+                best_score = score
+
+        if best_row is None:
+            raise ValueError("Il foglio Excel è vuoto e non contiene header.")
+
+        return best_row, best_header_map
 
     def _get_cell(self, row: ET.Element, col_idx: int) -> ET.Element | None:
         target_ref = _xlsx_column_name(col_idx)
@@ -415,9 +441,15 @@ class XLSXWorkbookEditor:
         value_columns: list[tuple[str, list[str], bool]],
         rows_to_write: list[dict[str, object]],
         normalizers: dict[str, callable],
-    ) -> None:
+    ) -> dict[str, object]:
         sheet_root = self.get_sheet_root(sheet_name)
-        header_map = self._build_header_map(sheet_root)
+        header_aliases = [
+            alias
+            for _, aliases, _ in [*keys, *value_columns]
+            for alias in aliases
+        ]
+        header_row, header_map = self._find_header_row(sheet_root, header_aliases)
+        header_row_idx = int(header_row.attrib.get("r", "1"))
         key_indexes = {
             key_name: _find_header_index(header_map, aliases, sheet_name, required=required)
             for key_name, aliases, required in keys
@@ -431,7 +463,9 @@ class XLSXWorkbookEditor:
         existing_map: dict[tuple[str, ...], ET.Element] = {}
         last_row_idx = max((int(row.attrib.get("r", "0")) for row in rows), default=1)
 
-        for row in rows[1:]:
+        data_rows = [row for row in rows if int(row.attrib.get("r", "0")) > header_row_idx]
+
+        for row in data_rows:
             key_parts: list[str] = []
             skip_row = False
             for key_name, _, _ in keys:
@@ -447,10 +481,11 @@ class XLSXWorkbookEditor:
             existing_map[tuple(key_parts)] = row
 
         clear_columns = [idx for idx in value_indexes.values() if idx is not None]
-        for row in rows[1:]:
+        for row in data_rows:
             for col_idx in clear_columns:
                 self._clear_column_values(row, col_idx)
 
+        rows_written = 0
         for item in rows_to_write:
             key_tuple = tuple(normalizers[key_name](item.get(key_name, "")) for key_name, _, _ in keys)
             if any(part == "" for part in key_tuple):
@@ -472,8 +507,17 @@ class XLSXWorkbookEditor:
                 if col_idx is None:
                     continue
                 self._write_value(row, row_idx, col_idx, item.get(col_name))
+            rows_written += 1
 
         self._update_dimension(sheet_root)
+        written_columns = [col_name for col_name, _, _ in value_columns if value_indexes[col_name] is not None]
+        return {
+            "sheet_name": sheet_name,
+            "header_row": header_row_idx,
+            "written_columns": written_columns,
+            "rows_written": rows_written,
+            "write_success": True,
+        }
 
     def save(self) -> None:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_file:
@@ -683,8 +727,9 @@ def write_results_to_excel(
     print("Writing results to Excel")
 
     editor = XLSXWorkbookEditor(excel_path)
-    editor.upsert_rows(
-        sheet_name="18_Distanze_Reali",
+    print("Writing to 18_Ranking_Pro")
+    store_competitor_summary = editor.upsert_rows(
+        sheet_name="18_Ranking_Pro",
         keys=[
             ("store_id", ["store_id", "id_store", "id negozio", "id_negozio"], True),
             ("competitor_id", ["competitor_id", "id_competitor", "id competitor"], True),
@@ -699,8 +744,16 @@ def write_results_to_excel(
             "competitor_id": _normalize_key,
         },
     )
-    editor.upsert_rows(
-        sheet_name="19_Isochrone_20min",
+    print(
+        "18_Ranking_Pro columns written: "
+        f"{', '.join(store_competitor_summary['written_columns']) or 'none'}"
+    )
+    print(f"18_Ranking_Pro rows written: {store_competitor_summary['rows_written']}")
+    print(f"18_Ranking_Pro write success: {store_competitor_summary['write_success']}")
+
+    print("Writing to 19_Benchmark_Modello")
+    comune_store_summary = editor.upsert_rows(
+        sheet_name="19_Benchmark_Modello",
         keys=[
             ("comune", ["comune", "citta", "città"], True),
             ("store_id", ["store_id", "id_store", "id negozio", "id_negozio"], True),
@@ -720,6 +773,12 @@ def write_results_to_excel(
             "store_id": _normalize_key,
         },
     )
+    print(
+        "19_Benchmark_Modello columns written: "
+        f"{', '.join(comune_store_summary['written_columns']) or 'none'}"
+    )
+    print(f"19_Benchmark_Modello rows written: {comune_store_summary['rows_written']}")
+    print(f"19_Benchmark_Modello write success: {comune_store_summary['write_success']}")
     editor.save()
     print("Update completed")
 
