@@ -23,6 +23,7 @@ from xml.etree import ElementTree as ET
 
 import pandas as pd
 import requests
+from dotenv import load_dotenv
 
 ORS_MATRIX_URL = "https://api.openrouteservice.org/v2/matrix/driving-car"
 
@@ -801,7 +802,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--comuni", default="input/comuni_sicilia.csv")
     parser.add_argument("--output-store-competitor", default="output/ors_store_competitor.csv")
     parser.add_argument("--output-comune-store", default="output/ors_comune_store.csv")
-    parser.add_argument("--api-key", default=os.getenv("ORS_API_KEY", ""))
     parser.add_argument("--max-pairs-per-batch", type=int, default=2000)
     parser.add_argument("--save-every", type=int, default=500)
     parser.add_argument(
@@ -819,6 +819,22 @@ def parse_args() -> argparse.Namespace:
         help="Pausa (in secondi) tra richieste ORS consecutive.",
     )
     return parser.parse_args()
+
+
+def get_ors_api_key() -> str:
+    load_dotenv()
+    api_key = os.getenv("ORS_API_KEY", "").strip()
+    if api_key:
+        return api_key
+
+    raise ValueError(
+        "ORS_API_KEY non è impostata. Configura la variabile d'ambiente prima di eseguire lo script. "
+        "Esempio:\n"
+        "  cp .env.example .env\n"
+        "  # aggiorna .env con la tua chiave ORS reale\n"
+        "  export ORS_API_KEY=\"la_tua_chiave_openrouteservice\"\n"
+        "In alternativa, se usi il file .env, inserisci ORS_API_KEY=... in .env e riesegui il comando."
+    )
 
 
 
@@ -853,10 +869,8 @@ def main() -> None:
         print("limit_pairs=0: validazione input completata, nessuna chiamata ORS eseguita.")
         return
 
-    if not args.api_key:
-        raise ValueError("API key ORS mancante. Passa --api-key oppure imposta ORS_API_KEY.")
-
-    client = ORSClient(api_key=args.api_key, timeout_s=args.timeout, max_retries=args.retries)
+    api_key = get_ors_api_key()
+    client = ORSClient(api_key=api_key, timeout_s=args.timeout, max_retries=args.retries)
 
     compute_matrix(
         client=client,
