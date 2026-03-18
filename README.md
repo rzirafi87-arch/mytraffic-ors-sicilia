@@ -13,7 +13,7 @@ Script per calcolare matrici di drive-time reali in Sicilia con OpenRouteService
 2. `python scripts/build_ors_matrices.py` legge direttamente il file Excel master.
 3. Lo script esporta automaticamente i fogli `02_Negozi` e `03_Competitor` in `input/negozi_rete.csv` e `input/competitor_sicilia.csv`.
 4. Dopo l'esportazione CSV, lo script esegue il calcolo ORS e salva gli output in `output/ors_store_competitor.csv` e `output/ors_comune_store.csv`.
-5. Terminato il calcolo, lo script reintegra i risultati in `MyTraffic_MASTER.xlsx` aggiornando i fogli `18_Distanze_Reali` e `19_Isochrone_20min` senza toccare le formule già presenti.
+5. Terminato il calcolo, lo script reintegra i risultati in `MyTraffic_MASTER.xlsx` aggiornando i fogli `18_Ranking_Pro` e `19_Benchmark_Modello` senza toccare le formule già presenti.
 
 ## Input operativi
 - `input/negozi_rete.csv`
@@ -36,8 +36,8 @@ Mapping atteso dal file Excel master:
 - `output/ors_comune_store.csv`
   - `comune`, `store_id`, `tempo_minuti`, `distanza_km`
 - `MyTraffic_MASTER.xlsx`
-  - Foglio `18_Distanze_Reali`: aggiorna le colonne `tempo_minuti` e `distanza_km` abbinate a `store_id` + `competitor_id`
-  - Foglio `19_Isochrone_20min`: aggiorna `tempo_minuti`, `distanza_km` e, se presente, una colonna flag `<=20 min` abbinate a `comune` + `store_id`
+  - Foglio `18_Ranking_Pro`: aggiorna le colonne `tempo_minuti` e `distanza_km` abbinate a `store_id` + `competitor_id`
+  - Foglio `19_Benchmark_Modello`: aggiorna `tempo_minuti`, `distanza_km` e, se presente, una colonna flag `<=20 min` abbinate a `comune` + `store_id`
 
 ## Requisiti
 ```bash
@@ -98,6 +98,8 @@ Logging atteso nelle prime fasi:
 - `CSV generated`
 - `ORS processing started`
 - `Writing results to Excel`
+- `Writing to 18_Ranking_Pro`
+- `Writing to 19_Benchmark_Modello`
 - `Update completed`
 
 ## Opzioni utili
