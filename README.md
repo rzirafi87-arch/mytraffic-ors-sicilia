@@ -6,6 +6,13 @@ Script per calcolare matrici di drive-time reali in Sicilia con OpenRouteService
 - File Excel master ufficiale: `MyTraffic_MASTER.xlsx`
 - Ignora qualsiasi file Excel precedente: `MyTraffic_MASTER.xlsx` è l'unica fonte di verità per le operazioni future.
 - I CSV in `input/` sono input operativi derivati dal file master Excel.
+- Audit repository: script, documentazione e passaggi di pipeline presenti in questo repo non fanno riferimento ad altri file Excel.
+
+## Pipeline attiva ORS
+1. `MyTraffic_MASTER.xlsx` resta la sorgente dati ufficiale.
+2. I dataset operativi vengono esportati in CSV dentro `input/`.
+3. `python scripts/build_ors_matrices.py` legge solo i CSV operativi e costruisce gli output ORS.
+4. Gli output vengono salvati in `output/ors_store_competitor.csv` e `output/ors_comune_store.csv`.
 
 ## Input operativi
 - `input/negozi_rete.csv`
