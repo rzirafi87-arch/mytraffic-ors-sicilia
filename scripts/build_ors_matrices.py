@@ -2,6 +2,7 @@
 """Costruisce le matrici ORS store->competitor e comune->store.
 
 Funzionalità principali:
+- esporta i CSV operativi da MyTraffic_MASTER.xlsx
 - batch massimo configurabile (default 2000 pair per chiamata)
 - retry automatico su errori/transienti
 - salvataggio progressivo su CSV
@@ -12,9 +13,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import time
+import zipfile
 from pathlib import Path
 from typing import Iterable
+from xml.etree import ElementTree as ET
 
 import pandas as pd
 import requests
@@ -42,7 +46,6 @@ class ORSClient:
 
     def _compute_retry_sleep(self, attempt: int, is_rate_limit: bool, response: requests.Response | None) -> float:
         """Calcola l'attesa di retry con backoff esponenziale conservativo."""
-        # Backoff esponenziale (5, 10, 20, 40, ...) con tetto massimo.
         exp_backoff = min(self.max_backoff_s, self.backoff_s * (2 ** (attempt - 1)))
 
         if not is_rate_limit:
@@ -57,7 +60,6 @@ class ORSClient:
                 except ValueError:
                     retry_after_s = None
 
-        # Per i 429 attendiamo almeno 60s, rispettando se possibile Retry-After.
         return max(exp_backoff, self.rate_limit_wait_s, retry_after_s or 0.0)
 
     def matrix_one_to_many(
@@ -128,6 +130,156 @@ def ensure_columns(df: pd.DataFrame, expected: Iterable[str], file_label: str) -
     missing = [c for c in expected if c not in df.columns]
     if missing:
         raise ValueError(f"{file_label}: colonne mancanti {missing}. Colonne trovate: {list(df.columns)}")
+
+
+def normalize_column_name(value: str) -> str:
+    value = str(value).strip().lower()
+    return re.sub(r"[^a-z0-9]+", "", value)
+
+
+def map_columns(df: pd.DataFrame, mapping: dict[str, list[str]], sheet_name: str) -> pd.DataFrame:
+    normalized = {normalize_column_name(col): col for col in df.columns}
+    rename_map: dict[str, str] = {}
+
+    for target, aliases in mapping.items():
+        source_col = None
+        for alias in aliases:
+            candidate = normalized.get(normalize_column_name(alias))
+            if candidate is not None:
+                source_col = candidate
+                break
+        if source_col is None:
+            raise ValueError(
+                f"Foglio {sheet_name}: impossibile mappare la colonna '{target}'. "
+                f"Colonne trovate: {list(df.columns)}"
+            )
+        rename_map[source_col] = target
+
+    mapped = df.rename(columns=rename_map)
+    return mapped[list(mapping.keys())].copy()
+
+
+def _xlsx_column_index(cell_ref: str) -> int:
+    letters = ''.join(ch for ch in cell_ref if ch.isalpha())
+    index = 0
+    for letter in letters:
+        index = index * 26 + (ord(letter.upper()) - ord('A') + 1)
+    return max(index - 1, 0)
+
+
+def _xlsx_cell_text(cell: ET.Element, shared_strings: list[str]) -> str:
+    cell_type = cell.attrib.get("t")
+
+    if cell_type == "inlineStr":
+        return "".join(node.text or "" for node in cell.findall('.//{*}t'))
+
+    value_node = cell.find('{*}v')
+    if value_node is None or value_node.text is None:
+        return ""
+
+    raw_value = value_node.text
+    if cell_type == "s":
+        return shared_strings[int(raw_value)]
+    return raw_value
+
+
+def load_excel_sheet(excel_path: Path, sheet_name: str) -> pd.DataFrame:
+    try:
+        with zipfile.ZipFile(excel_path) as archive:
+            shared_strings = []
+            if 'xl/sharedStrings.xml' in archive.namelist():
+                shared_root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+                for item in shared_root.findall('{*}si'):
+                    shared_strings.append(''.join(node.text or '' for node in item.findall('.//{*}t')))
+
+            workbook_root = ET.fromstring(archive.read('xl/workbook.xml'))
+            rels_root = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
+            relationships = {
+                rel.attrib['Id']: rel.attrib['Target']
+                for rel in rels_root.findall('{*}Relationship')
+            }
+
+            sheet_target = None
+            for sheet in workbook_root.findall('.//{*}sheet'):
+                if sheet.attrib.get('name') == sheet_name:
+                    rel_id = sheet.attrib.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+                    sheet_target = relationships.get(rel_id)
+                    break
+
+            if sheet_target is None:
+                raise ValueError(f"Foglio Excel non trovato: {sheet_name}")
+
+            sheet_path = sheet_target if sheet_target.startswith('xl/') else f"xl/{sheet_target}"
+            sheet_root = ET.fromstring(archive.read(sheet_path))
+    except zipfile.BadZipFile as exc:
+        raise RuntimeError(f"Il file {excel_path} non è un .xlsx valido.") from exc
+    except KeyError as exc:
+        raise RuntimeError(f"Struttura .xlsx incompleta in {excel_path}: {exc}") from exc
+
+    rows: list[list[str]] = []
+    max_width = 0
+    for row in sheet_root.findall('.//{*}sheetData/{*}row'):
+        values: list[str] = []
+        for cell in row.findall('{*}c'):
+            col_idx = _xlsx_column_index(cell.attrib.get('r', 'A1'))
+            while len(values) < col_idx:
+                values.append('')
+            values.append(_xlsx_cell_text(cell, shared_strings))
+        while values and values[-1] == '':
+            values.pop()
+        if values:
+            rows.append(values)
+            max_width = max(max_width, len(values))
+
+    if not rows:
+        return pd.DataFrame()
+
+    normalized_rows = [row + [''] * (max_width - len(row)) for row in rows]
+    header = normalized_rows[0]
+    data = normalized_rows[1:]
+    return pd.DataFrame(data, columns=header)
+
+
+def export_excel_inputs(excel_path: Path, stores_csv: Path, competitors_csv: Path) -> None:
+    if not excel_path.exists():
+        raise FileNotFoundError(f"File Excel non trovato: {excel_path}")
+    if excel_path.stat().st_size == 0:
+        raise ValueError(f"File Excel vuoto: {excel_path}")
+
+    stores_mapping = {
+        "store_id": ["store_id", "id_store", "id negozio", "id_negozio", "codice_store", "codice negozio"],
+        "brand": ["brand", "insegna"],
+        "comune": ["comune", "citta", "città"],
+        "provincia": ["provincia", "prov"],
+        "lat": ["lat", "latitude", "latitudine"],
+        "lon": ["lon", "lng", "longitude", "longitudine"],
+    }
+    competitors_mapping = {
+        "competitor_id": ["competitor_id", "id_competitor", "id competitor", "codice_competitor"],
+        "brand": ["brand", "insegna"],
+        "comune": ["comune", "citta", "città"],
+        "indirizzo": ["indirizzo", "address"],
+        "lat": ["lat", "latitude", "latitudine"],
+        "lon": ["lon", "lng", "longitude", "longitudine"],
+        "peso_competitor": ["peso_competitor", "peso competitor", "peso"],
+        "livello_competitor": ["livello_competitor", "livello competitor", "livello"],
+    }
+
+    stores_raw = load_excel_sheet(excel_path, "02_Negozi")
+    competitors_raw = load_excel_sheet(excel_path, "03_Competitor")
+
+    print(f"Excel loaded: {excel_path}")
+
+    stores_df = map_columns(stores_raw, stores_mapping, "02_Negozi")
+    competitors_df = map_columns(competitors_raw, competitors_mapping, "03_Competitor")
+
+    stores_csv.parent.mkdir(parents=True, exist_ok=True)
+    competitors_csv.parent.mkdir(parents=True, exist_ok=True)
+    stores_df.to_csv(stores_csv, index=False)
+    competitors_df.to_csv(competitors_csv, index=False)
+
+    print(f"CSV generated: {stores_csv}")
+    print(f"CSV generated: {competitors_csv}")
 
 
 def load_existing_pairs(path: Path, src_col: str, dst_col: str) -> set[tuple[str, str]]:
@@ -233,6 +385,7 @@ def compute_matrix(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build matrici ORS Sicilia")
+    parser.add_argument("--excel", default="MyTraffic_MASTER.xlsx")
     parser.add_argument("--stores", default="input/negozi_rete.csv")
     parser.add_argument("--competitors", default="input/competitor_sicilia.csv")
     parser.add_argument("--comuni", default="input/comuni_sicilia.csv")
@@ -258,20 +411,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+
 def main() -> None:
     args = parse_args()
+
+    export_excel_inputs(
+        excel_path=Path(args.excel),
+        stores_csv=Path(args.stores),
+        competitors_csv=Path(args.competitors),
+    )
 
     stores = pd.read_csv(args.stores)
     competitors = pd.read_csv(args.competitors)
     comuni = pd.read_csv(args.comuni)
 
-    ensure_columns(stores, ["store_id", "lat", "lon"], args.stores)
-    ensure_columns(competitors, ["competitor_id", "lat", "lon"], args.competitors)
+    ensure_columns(stores, ["store_id", "brand", "comune", "provincia", "lat", "lon"], args.stores)
+    ensure_columns(
+        competitors,
+        ["competitor_id", "brand", "comune", "indirizzo", "lat", "lon", "peso_competitor", "livello_competitor"],
+        args.competitors,
+    )
     ensure_columns(comuni, ["comune", "lat", "lon"], args.comuni)
 
     stores = stores.dropna(subset=["store_id", "lat", "lon"]).copy()
     competitors = competitors.dropna(subset=["competitor_id", "lat", "lon"]).copy()
     comuni = comuni.dropna(subset=["comune", "lat", "lon"]).copy()
+
+    print("ORS processing started")
 
     if args.limit_pairs == 0:
         print("limit_pairs=0: validazione input completata, nessuna chiamata ORS eseguita.")

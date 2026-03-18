@@ -10,9 +10,9 @@ Script per calcolare matrici di drive-time reali in Sicilia con OpenRouteService
 
 ## Pipeline attiva ORS
 1. `MyTraffic_MASTER.xlsx` resta la sorgente dati ufficiale.
-2. I dataset operativi vengono esportati in CSV dentro `input/`.
-3. `python scripts/build_ors_matrices.py` legge solo i CSV operativi e costruisce gli output ORS.
-4. Gli output vengono salvati in `output/ors_store_competitor.csv` e `output/ors_comune_store.csv`.
+2. `python scripts/build_ors_matrices.py` legge direttamente il file Excel master.
+3. Lo script esporta automaticamente i fogli `02_Negozi` e `03_Competitor` in `input/negozi_rete.csv` e `input/competitor_sicilia.csv`.
+4. Dopo l'esportazione CSV, lo script esegue il calcolo ORS e salva gli output in `output/ors_store_competitor.csv` e `output/ors_comune_store.csv`.
 
 ## Input operativi
 - `input/negozi_rete.csv`
@@ -24,6 +24,10 @@ Lo script usa i **nomi colonna reali** presenti nei file:
 - `negozi_rete.csv`: `store_id`, `brand`, `comune`, `provincia`, `lat`, `lon`
 - `competitor_sicilia.csv`: `competitor_id`, `brand`, `comune`, `indirizzo`, `lat`, `lon`, `peso_competitor`, `livello_competitor`
 - `comuni_sicilia.csv`: `comune`, `provincia`, `popolazione`, `lat`, `lon`
+
+Mapping atteso dal file Excel master:
+- Foglio `02_Negozi` → `store_id`, `brand`, `comune`, `provincia`, `lat`, `lon`
+- Foglio `03_Competitor` → `competitor_id`, `brand`, `comune`, `indirizzo`, `lat`, `lon`, `peso_competitor`, `livello_competitor`
 
 ## Output
 - `output/ors_store_competitor.csv`
@@ -43,11 +47,16 @@ Imposta la chiave ORS:
 export ORS_API_KEY="la_tua_chiave"
 ```
 
-Esegui:
+Esegui la pipeline completa end-to-end:
 
 ```bash
-python scripts/build_ors_matrices.py
+python scripts/build_ors_matrices.py --excel MyTraffic_MASTER.xlsx
 ```
+
+Logging atteso nelle prime fasi:
+- `Excel loaded`
+- `CSV generated`
+- `ORS processing started`
 
 ## Opzioni utili
 - `--max-pairs-per-batch` (default `2000`): massimo numero di coppie origine-destinazione per singola chiamata ORS.
