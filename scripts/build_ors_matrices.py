@@ -46,6 +46,13 @@ class ORSClient:
         self.max_backoff_s = max_backoff_s
         self.session = requests.Session()
 
+    @staticmethod
+    def _format_response_message(response: requests.Response | None) -> str:
+        if response is None:
+            return "<nessuna risposta>"
+        message = response.text.strip()
+        return message if message else "<body vuoto>"
+
     def _compute_retry_sleep(self, attempt: int, is_rate_limit: bool, response: requests.Response | None) -> float:
         """Calcola l'attesa di retry con backoff esponenziale conservativo."""
         exp_backoff = min(self.max_backoff_s, self.backoff_s * (2 ** (attempt - 1)))
@@ -97,7 +104,8 @@ class ORSClient:
                 )
                 if res.status_code == 429 or 500 <= res.status_code < 600:
                     raise requests.HTTPError(
-                        f"status={res.status_code} body={res.text[:500]}", response=res
+                        f"status={res.status_code} body={self._format_response_message(res)}",
+                        response=res,
                     )
                 res.raise_for_status()
                 body = res.json()
@@ -105,10 +113,16 @@ class ORSClient:
                 distances = body.get("distances", [[None]])[0]
                 return durations, distances
             except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as exc:
+                response = getattr(exc, "response", None)
+                if response is not None:
+                    print(
+                        "ORS request failed: "
+                        f"status_code={response.status_code}, "
+                        f"response_message={self._format_response_message(response)}"
+                    )
                 if attempt == self.max_retries:
                     raise RuntimeError(f"ORS matrix fallita dopo {attempt} tentativi: {exc}") from exc
 
-                response = getattr(exc, "response", None)
                 is_rate_limit = response is not None and response.status_code == 429
 
                 sleep_s = self._compute_retry_sleep(
@@ -824,11 +838,15 @@ def parse_args() -> argparse.Namespace:
 def get_ors_api_key() -> str:
     load_dotenv()
     api_key = os.getenv("ORS_API_KEY", "").strip()
+    print(f"ORS API key loaded: {'YES' if api_key else 'NO'}")
     if api_key:
+        masked_key = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "[hidden]"
+        print(f"ORS_API_KEY detected from environment: {masked_key}")
         return api_key
 
     raise ValueError(
-        "ORS_API_KEY non è impostata. Configura la variabile d'ambiente prima di eseguire lo script. "
+        "ORS_API_KEY non è impostata. ORS API key loaded: NO. "
+        "Configura la variabile d'ambiente prima di eseguire lo script. "
         "Esempio:\n"
         "  cp .env.example .env\n"
         "  # aggiorna .env con la tua chiave ORS reale\n"
