@@ -63,13 +63,19 @@ pip install -r requirements.txt
    export ORS_API_KEY="your_openrouteservice_api_key_here"
    ```
 
-Lo script legge sempre `ORS_API_KEY` dall'ambiente. Se la variabile non è disponibile, termina con un messaggio chiaro che spiega come configurarla.
+Lo script legge sempre `ORS_API_KEY` dall'ambiente o dal file `.env` caricato con `python-dotenv`. In avvio stampa `ORS API key loaded: YES/NO` e conferma il rilevamento della chiave senza mostrare il valore completo. Se la variabile non è disponibile, termina con un messaggio chiaro che spiega come configurarla.
 
 ## Esecuzione
 Dopo aver configurato `ORS_API_KEY`, esegui la pipeline completa end-to-end:
 
 ```bash
 python scripts/build_ors_matrices.py --excel MyTraffic_MASTER.xlsx
+```
+
+Comando completo con chiave passata inline per una singola esecuzione:
+
+```bash
+ORS_API_KEY="your_openrouteservice_api_key_here" python scripts/build_ors_matrices.py --excel MyTraffic_MASTER.xlsx
 ```
 
 Esempio completo usando `.env`:
