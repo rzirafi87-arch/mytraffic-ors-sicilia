@@ -140,21 +140,29 @@ def normalize_column_name(value: str) -> str:
 
 def map_columns(df: pd.DataFrame, mapping: dict[str, list[str]], sheet_name: str) -> pd.DataFrame:
     normalized = {normalize_column_name(col): col for col in df.columns}
+    detected_columns = list(df.columns)
     rename_map: dict[str, str] = {}
+    detected_mapping: dict[str, str] = {}
+
+    print(f"Foglio {sheet_name}: colonne rilevate {detected_columns}")
 
     for target, aliases in mapping.items():
         source_col = None
-        for alias in aliases:
+        candidate_aliases = [target, *aliases]
+        for alias in candidate_aliases:
             candidate = normalized.get(normalize_column_name(alias))
             if candidate is not None:
                 source_col = candidate
                 break
         if source_col is None:
             raise ValueError(
-                f"Foglio {sheet_name}: impossibile mappare la colonna '{target}'. "
-                f"Colonne trovate: {list(df.columns)}"
+                f"Foglio {sheet_name}: colonna obbligatoria '{target}' non trovata. "
+                f"Alias tentati: {candidate_aliases}. Colonne disponibili: {detected_columns}"
             )
         rename_map[source_col] = target
+        detected_mapping[target] = source_col
+
+    print(f"Foglio {sheet_name}: mapping colonne {detected_mapping}")
 
     mapped = df.rename(columns=rename_map)
     return mapped[list(mapping.keys())].copy()
@@ -469,7 +477,11 @@ class XLSXWorkbookEditor:
                 temp_path.unlink()
 
 
-def load_excel_sheet(excel_path: Path, sheet_name: str) -> pd.DataFrame:
+def load_excel_sheet(
+    excel_path: Path,
+    sheet_name: str,
+    header_aliases: Iterable[str] | None = None,
+) -> pd.DataFrame:
     try:
         with zipfile.ZipFile(excel_path) as archive:
             shared_strings = []
@@ -503,7 +515,6 @@ def load_excel_sheet(excel_path: Path, sheet_name: str) -> pd.DataFrame:
         raise RuntimeError(f"Struttura .xlsx incompleta in {excel_path}: {exc}") from exc
 
     rows: list[list[str]] = []
-    max_width = 0
     for row in sheet_root.findall('.//{*}sheetData/{*}row'):
         values: list[str] = []
         for cell in row.findall('{*}c'):
@@ -515,12 +526,24 @@ def load_excel_sheet(excel_path: Path, sheet_name: str) -> pd.DataFrame:
             values.pop()
         if values:
             rows.append(values)
-            max_width = max(max_width, len(values))
 
     if not rows:
         return pd.DataFrame()
 
-    normalized_rows = [row + [''] * (max_width - len(row)) for row in rows]
+    header_row_idx = 0
+    if header_aliases:
+        expected_headers = {normalize_column_name(alias) for alias in header_aliases}
+        best_score = -1
+        for idx, row in enumerate(rows):
+            normalized_row = {normalize_column_name(value) for value in row if str(value).strip()}
+            score = len(normalized_row & expected_headers)
+            if score > best_score:
+                best_score = score
+                header_row_idx = idx
+
+    selected_rows = rows[header_row_idx:]
+    max_width = max(len(row) for row in selected_rows)
+    normalized_rows = [row + [''] * (max_width - len(row)) for row in selected_rows]
     header = normalized_rows[0]
     data = normalized_rows[1:]
     return pd.DataFrame(data, columns=header)
@@ -533,26 +556,29 @@ def export_excel_inputs(excel_path: Path, stores_csv: Path, competitors_csv: Pat
         raise ValueError(f"File Excel vuoto: {excel_path}")
 
     stores_mapping = {
-        "store_id": ["store_id", "id_store", "id negozio", "id_negozio", "codice_store", "codice negozio"],
-        "brand": ["brand", "insegna"],
-        "comune": ["comune", "citta", "città"],
-        "provincia": ["provincia", "prov"],
-        "lat": ["lat", "latitude", "latitudine"],
-        "lon": ["lon", "lng", "longitude", "longitudine"],
+        "store_id": ["id", "codice", "codice_pv", "id_store", "id negozio", "id_negozio", "codice_store", "codice negozio"],
+        "brand": ["insegna", "brand_rete"],
+        "comune": ["città", "citta"],
+        "provincia": ["prov"],
+        "lat": ["latitude", "latitudine"],
+        "lon": ["lng", "longitude", "longitudine"],
     }
     competitors_mapping = {
-        "competitor_id": ["competitor_id", "id_competitor", "id competitor", "codice_competitor"],
-        "brand": ["brand", "insegna"],
-        "comune": ["comune", "citta", "città"],
-        "indirizzo": ["indirizzo", "address"],
-        "lat": ["lat", "latitude", "latitudine"],
-        "lon": ["lon", "lng", "longitude", "longitudine"],
-        "peso_competitor": ["peso_competitor", "peso competitor", "peso"],
-        "livello_competitor": ["livello_competitor", "livello competitor", "livello"],
+        "competitor_id": ["id", "codice", "codice_pv", "id_competitor", "id competitor", "codice_competitor"],
+        "brand": ["insegna"],
+        "comune": ["città", "citta"],
+        "indirizzo": ["address"],
+        "lat": ["latitude", "latitudine"],
+        "lon": ["lng", "longitude", "longitudine"],
+        "peso_competitor": ["peso competitor", "peso"],
+        "livello_competitor": ["livello competitor", "livello"],
     }
 
-    stores_raw = load_excel_sheet(excel_path, "02_Negozi")
-    competitors_raw = load_excel_sheet(excel_path, "03_Competitor")
+    stores_header_aliases = [alias for aliases in stores_mapping.values() for alias in aliases] + list(stores_mapping.keys())
+    competitors_header_aliases = [alias for aliases in competitors_mapping.values() for alias in aliases] + list(competitors_mapping.keys())
+
+    stores_raw = load_excel_sheet(excel_path, "02_Negozi", header_aliases=stores_header_aliases)
+    competitors_raw = load_excel_sheet(excel_path, "03_Competitor", header_aliases=competitors_header_aliases)
 
     print(f"Excel loaded: {excel_path}")
 
