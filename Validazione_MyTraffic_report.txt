@@ -1,0 +1,63 @@
+VALIDAZIONE FINALE MODELLO – MyTraffic
+
+File validato: MyTraffic_MASTER_validato.xlsx
+
+Sintesi esecutiva
+- Struttura workbook coerente: 26 fogli, flusso end-to-end completo.
+- Modello core presente e collegato: anagrafiche, matrici, gravity model, ranking, trade area, simulatore, ORS, audit competitor.
+- Bloccanti tecnici corretti nel file validato.
+
+Correzioni applicate
+1) 08_Ranking_Comuni
+- Ripristinata la logica di Rank_finale in colonna M.
+- Generato ranking univoco decrescente sullo Score_opportunita per i comuni con Filtro_OK = SI.
+- Effetto: 09_Shortlist e 10_Dashboard tornano ad alimentarsi correttamente.
+
+2) 09_Shortlist / 10_Dashboard
+- Aggiornati i valori cache delle formule dipendenti dal ranking.
+- Risolto il blocco su 10_Dashboard!E8.
+
+3) 18_Distanza_Reali
+- Resi robusti i calcoli su righe senza tempo ORS:
+  * tempo_num non genera più #VALUE!
+  * fascia_tempo resta vuota se il tempo manca
+  * entro_20 / entro_30 vanno a 0 se il tempo manca
+- Righe con ORS mancante stimate: 144 coppie comune-store.
+
+4) 18_Store_Competitor_Reali
+- Resi robusti i calcoli su righe senza tempo ORS:
+  * tempo_num non genera più #VALUE!
+  * flag entro_15/20/30 vanno a 0 se il tempo manca
+  * pressione_base va a 0 se il tempo manca
+- Righe con ORS mancante stimate: 888 coppie store-competitor.
+
+5) 18_Ranking_Pro
+- Azzerati i cache error downstream su colonne R/S per evitare #VALUE! residui.
+
+Evidenze di modello
+- Rete negozi: 24 store.
+- Comuni analizzati: 391.
+- Matrice comune-store: 9.384 combinazioni.
+- Ranking finale attivo: 55 comuni prioritizzati.
+- Top shortlist dopo fix cache:
+  1. Marsala (TP) – score 93,6
+  2. Acireale (CT) – score 91,7
+  3. Bagheria (PA) – score 91,6
+  4. Paternò (CT) – score 86,3
+  5. Monreale (PA) – score 84,9
+
+Lettura manageriale
+- Il gravity model è strutturalmente coerente: attrazione store, pressione competitor, quota territoriale, domanda e fatturato potenziale.
+- Il ranking finale torna leggibile e “presentabile”.
+- L’area ORS è già ben impostata, ma resta un backlog dati su coppie senza tempo reale.
+- Il foglio 20_Audit_Competitor è utile come governance backlog, non come input automatico già chiuso al 100%.
+
+Rischi residui (non bloccanti)
+- Alcune coppie ORS restano senza dato reale: il file ora non va più in errore, ma quei casi vanno ancora completati se vuoi un benchmark “software-grade”.
+- Audit competitor non totalmente chiuso su tutti i brand/famiglie: serve ultimo giro deduplica + geocodifica per massimizzare copertura.
+- Per una consegna commerciale finale conviene ancora un passaggio visuale in Excel su dashboard, shortlist e simulatore.
+
+Giudizio finale
+- Stato del file: USABILE.
+- Stato del modello: solido per demo / vendita / discussione strategica.
+- Stato per “livello MyTraffic professionale”: molto vicino, ma il vero ultimo miglio è chiudere completamente backlog ORS + audit competitor.
