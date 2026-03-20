@@ -98,7 +98,7 @@ def main():
             existing_keys = set(zip(old["store_id"].astype(str), old["competitor_id"].astype(str)))
 
     file_exists = output_path.exists()
-    with output_path.open("a", newline="", encoding="utf-8") as f:
+    with output_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists or output_path.stat().st_size == 0:
             writer.writerow([
