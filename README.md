@@ -120,6 +120,27 @@ Esempio test con piccolo batch reale:
 python scripts/build_ors_matrices.py --limit-pairs 100 --max-pairs-per-batch 2000
 ```
 
+
+## Aggiornamento automatico (one-click)
+
+Per aggiornare tutti i dati, normalizzare i brand, importare i risultati ORS e aggiornare la presentazione:
+
+1. Assicurati che la chiave ORS sia configurata come da istruzioni sopra.
+2. Fai doppio click su `update_pipeline.bat` oppure esegui da terminale:
+
+  ```cmd
+  update_pipeline.bat
+  ```
+
+Questo comando esegue in sequenza:
+ - Normalizzazione brand competitor
+ - Importazione output ORS in Excel
+ - Aggiornamento formule e compatibilità
+ - Aggiornamento fogli presentazione e check brand
+ - (Opzionale) Popolamento fogli riepilogo competitor
+
+Al termine, il file Excel sarà pronto per l'analisi e la presentazione.
+
 ## Comportamento implementato
 - Batch massimo per chiamata rispettato (default 2000).
 - Retry automatico su timeout/errori di rete/429/5xx.
