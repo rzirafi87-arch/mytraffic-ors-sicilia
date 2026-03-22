@@ -1,6 +1,6 @@
 import pandas as pd
 
-file = "MyTraffic_MASTER_validato.xlsx"
+file = "MyTraffic_MASTER.xlsx"
 
 df = pd.read_excel(file, sheet_name="03_Competitor")
 

@@ -1,7 +1,7 @@
 import pandas as pd
 from openpyxl import load_workbook
 
-FILE = "MyTraffic_MASTER_validato.xlsx"
+FILE = "MyTraffic_MASTER.xlsx"
 ORS = "output/output_ors.csv"
 
 df = pd.read_csv(ORS)

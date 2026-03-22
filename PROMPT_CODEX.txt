@@ -1,7 +1,7 @@
 Contesto aggiornato dei dati:
-- Il file Excel principale è `MyTraffic_MASTER.xlsx`.
+Il file Excel principale è `MyTraffic_MASTER.xlsx`.
 - Ignora qualsiasi file Excel precedente.
-- Usa `MyTraffic_MASTER.xlsx` come unica fonte di verità per tutte le operazioni future.
+Usa `MyTraffic_MASTER.xlsx` come unica fonte di verità per tutte le operazioni future.
 
 Lavora in questo progetto senza toccare file non necessari.
 

@@ -4,7 +4,7 @@ Script per calcolare matrici di drive-time reali in Sicilia con OpenRouteService
 
 ## Fonte dati
 - File Excel master ufficiale: `MyTraffic_MASTER.xlsx`
-- Ignora qualsiasi file Excel precedente: `MyTraffic_MASTER.xlsx` è l'unica fonte di verità per le operazioni future.
+- Ignora qualsiasi file Excel precedente: `MyTraffic_MASTER.xlsx` è l'unica fonte di verità per le operazioni future.
 - I CSV in `input/` sono input operativi derivati dal file master Excel.
 - Audit repository: script, documentazione e passaggi di pipeline presenti in questo repo non fanno riferimento ad altri file Excel.
 

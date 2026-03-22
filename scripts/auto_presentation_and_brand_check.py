@@ -1,6 +1,6 @@
 from openpyxl import load_workbook
 
-FILE = "MyTraffic_MASTER_validato.xlsx"
+FILE = "MyTraffic_MASTER.xlsx"
 wb = load_workbook(FILE)
 
 # 1. Ordina i fogli in modo logico per presentazione e analisi

@@ -1,6 +1,6 @@
 VALIDAZIONE FINALE MODELLO – MyTraffic
 
-File validato: MyTraffic_MASTER_validato.xlsx
+File validato: MyTraffic_MASTER.xlsx
 
 Sintesi esecutiva
 - Struttura workbook coerente: 26 fogli, flusso end-to-end completo.
