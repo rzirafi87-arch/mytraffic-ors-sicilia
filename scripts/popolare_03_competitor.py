@@ -13,6 +13,7 @@ TARGET_BRANDS = [
 ]
 
 HELPER_COLS = [
+    # Colonne di supporto e analisi automatica
     "Classe_competitor", "Famiglia_brand", "Ready_layer", "Dedupe_key",
     "Livello_competitor", "Competitor_diretto", "Brand_modello",
     "Flag_brand_chiave", "Priorita_verifica"
@@ -94,6 +95,14 @@ for col_name in HELPER_COLS:
         ws.cell(1, new_col).value = col_name
         headers[col_name] = new_col
 
+# Assicura che le colonne chiave siano sempre presenti e in posizione corretta
+required_cols = ["Flag_brand_chiave", "Priorita_verifica", "Brand_modello"]
+for col in required_cols:
+    if col not in headers:
+        new_col = ws.max_column + 1
+        ws.cell(1, new_col).value = col
+        headers[col] = new_col
+
 def first_existing(candidates):
     for name in candidates:
         if name in headers:
@@ -121,6 +130,8 @@ c_priorita = headers["Priorita_verifica"]
 
 brand_counts = {}
 
+
+# --- Ciclo principale: aggiorna tutte le colonne chiave ---
 for r in range(2, ws.max_row + 1):
     raw_brand = ws.cell(r, col_brand_raw).value if col_brand_raw else ""
     comune = ws.cell(r, col_comune).value if col_comune else ""
@@ -128,10 +139,12 @@ for r in range(2, ws.max_row + 1):
     lat = ws.cell(r, col_lat).value if col_lat else ""
     lon = ws.cell(r, col_lon).value if col_lon else ""
 
+    # Normalizzazione e logica brand
     brand_modello = canon_brand(raw_brand)
     famiglia_brand = brand_modello
     brand_counts[brand_modello] = brand_counts.get(brand_modello, 0) + 1
 
+    # Flag se il brand è tra quelli chiave
     flag_brand = 1 if brand_modello in TARGET_BRANDS else 0
     competitor_diretto = "SI" if flag_brand == 1 else "NO"
     livello = "DIRETTO" if flag_brand == 1 else "ALTRO"
@@ -142,6 +155,7 @@ for r in range(2, ws.max_row + 1):
     has_min = brand_modello != "" and comune not in (None, "") and indirizzo not in (None, "")
     ready = "READY" if has_geo and has_min else "CHECK"
 
+    # Priorità verifica: ALTA se manca geolocazione, MEDIA se tutto ok, BASSA se non chiave
     if flag_brand == 1 and not has_geo:
         priorita = "ALTA"
     elif flag_brand == 1:
@@ -149,6 +163,7 @@ for r in range(2, ws.max_row + 1):
     else:
         priorita = "BASSA"
 
+    # Scrittura valori nelle colonne (robusto anche se l'ordine cambia)
     ws.cell(r, c_classe).value = classe
     ws.cell(r, c_famiglia).value = famiglia_brand
     ws.cell(r, c_ready).value = ready
@@ -158,6 +173,14 @@ for r in range(2, ws.max_row + 1):
     ws.cell(r, c_brand_modello).value = brand_modello
     ws.cell(r, c_flag).value = flag_brand
     ws.cell(r, c_priorita).value = priorita
+
+    # Aggiorna anche le colonne chiave se non esistono (ridondanza per sicurezza)
+    if "Flag_brand_chiave" in headers:
+        ws.cell(r, headers["Flag_brand_chiave"]).value = flag_brand
+    if "Priorita_verifica" in headers:
+        ws.cell(r, headers["Priorita_verifica"]).value = priorita
+    if "Competitor modello" in headers:
+        ws.cell(r, headers["Competitor modello"]).value = brand_modello
 
 ws2 = wb[SHEET_COP]
 brand_modello_col_letter = col_letter(c_brand_modello)
